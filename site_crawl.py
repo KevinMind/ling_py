@@ -14,6 +14,10 @@ import time
 # PROXY NOTES
 # 1. http://www.doc.ic.ac.uk/~pg1712/blog/python-proxy/
 
+
+def make_site(site):
+    return Site(site)
+
 class Site:
     def __init__(self, name):
         self.name = name
@@ -23,11 +27,12 @@ class Site:
 
     ###################################### Format URL
     def format_url(self, url):
+        print("UNFORMATTED: {}".format(url))
         # Check/Format URL
-        # check for no subdomain
+        # trim the last char if it is a "/"
         if(url[-1] == "/"):
             url = url[:-1]
-
+        # every url must have at least 2 "."
         if(url.count(".") < 2):
             # print("invalid url")
             return "invalid url"
@@ -39,36 +44,43 @@ class Site:
             full_url = "https://" + url
         return full_url
     ###################################### Run Crawler
-    # @lru_cache(maxsize=1000)
+    @lru_cache(maxsize=1000)
     def run_crawler(self, url):
+        print("running crawler: {}".format(url))
         self.crawl_count += 1
-        # ensure proper url formating
-        url = self.format_url(url)
-        # GEN LINK INSTANCE
-        page = Page(url)
+        if self.crawl_count < 1000:
+            print(len(self.urls))
+            # ensure proper url formating
+            # print(url)
+            url = self.format_url(url)
+            # print("clean url: {}".format(url))
 
-        self.urls.add(page.url)
+            # GEN LINK INSTANCE
+            page = Page(url)
+            # print(page)
+            self.urls.add(page.url)
+            page.add_page_content()
+            page.add_links()
 
-        page.add_page_content()
-        page.add_links()
-
-        links_len = len(page.links)
-        # print("Crawled: {}".format(self.urls))
-        for link in page.links:
-            # print("checking link {}".format(links[i]))
-            if link not in self.urls:
-                # print(link)
-                self.run_crawler(link)
-                # print("found")
-                # print("link not found: {}".format(page.links[i]))
-                # run_crawler(page.links[i])
+            links_len = len(page.links)
+            # print("Crawled: {}".format(self.urls))
+            for link in page.links:
+                # print("checking link {}".format(links[i]))
+                if link not in self.urls:
+                    # print(link)
+                    self.run_crawler(link)
+                    # print("found")
+                    # print("link not found: {}".format(page.links[i]))
+                    # run_crawler(page.links[i])
 
 
 class Page:
     def __init__(self, url):
+        # should probably implement universal url cleaning function
         if(url[-1] == "/"):
             url = url[:-1]
         self.url = url
+        self.name = ""
         self.id = str(uuid.uuid4())
         self.links = set()
         self.page = ""
@@ -96,7 +108,9 @@ class Page:
         payload['content'] = r.content
 
         # SET PAGE CONTENT
-        self.page = html.fromstring(r.content)
+        if html.fromstring(r.content):
+            self.page = html.fromstring(r.content)
+            self.name = self.page.xpath("title")
 
     ###################################### Parse Links on Page
     def add_links(self):
@@ -107,40 +121,45 @@ class Page:
 
         # separate absolute and relatie links
         for link in all_links:
-            # check for relative link
-            if(link[0] == "/"):
-                # print("ADDED rel: {}".format(link))
-                # ADD relative links to payload
-                link = self.url + link
-                links.append(link)
-            # filter out section links, and comm links
-            elif(link[0] == "#"):
-                # print("SKIPPED #: {}".format(link))
-                pass
-            elif(link.find("tel:") < 0 and link.find("mailto:") < 0):
-                # add absolute links to abs_links
-                abs_links.append(link)
-                # print("ADDED abs: {}".format(link))
-            else:
-                pass
-                # print("SKIPPED: {}".format(link))
+            if "?" not in link and (len(link)> 0):
+                # check for relative link
+                if(link[0] == "/"):
+                    # print("ADDED rel: {}".format(link))
+                    # ADD relative links to payload
+                    link = self.url + link
+                    links.append(link)
+                # filter out section links, and comm links
+                elif(link[0] == "#"):
+                    # print("SKIPPED #: {}".format(link))
+                    pass
+                elif(link.find("tel:") < 0 and link.find("mailto:") < 0):
+                    # add absolute links to abs_links
+                    abs_links.append(link)
+                    # print("ADDED abs: {}".format(link))
+                else:
+                    pass
+                    # print("SKIPPED: {}".format(link))
 
         # check host of abs_links
         for link in abs_links:
-            if(link.find(url) > -1):
+            if(link.find(self.url) > -1):
                 # print("SAMEHOST: {}".format(link))
                 link = link
                 links.append(link)
 
         # printlinks for debugging
-        # print(self.url)
-        # print("links: ")
+        print(self.url)
+        print("links: ")
         for link in links:
+            # universal url cleaner function
             if(link[-1] == "/"):
                 # trim / off of end
                 link = link[:-1]
             # print("     {}".format(link))
+            # print("link: {}".format(link))
             self.links.add(link)
+            print("\n\n{}\n\n".format(self.links))
+
 
 
 # url = input("enter a url: ->  ")
